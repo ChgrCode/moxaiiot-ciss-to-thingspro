@@ -1,0 +1,19 @@
+{
+	"tpg_vtag_template": "CissSensor",
+	"tpg_publish_interval": 5,
+	"ciss_nodes" : [
+		{
+			"id": "cissACM0",
+			"name": "CissACM0",
+			"ini_file": "sensor.ini",
+			"ini_print": "True",
+			"com_port": "/dev/ttyACM0",
+			"sensors": {
+				"Accl": {
+					"publish": "True"
+				}
+			}
+				
+		}
+	]		
+}
