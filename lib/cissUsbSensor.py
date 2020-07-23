@@ -68,11 +68,15 @@ class CissSensor(AppBase):
         self.name = kwargs.get('name', self.get_base_id())
         self.unit = kwargs.get('unit')
         self.value_timestamp = None
+        self._value = {
+            'timestamp': None,
+            'current': 0,
+            'min': 0,
+            'max': 0,
+            'mean': 0,
+            'std': 0            
+            }
         self.value = 0
-        self.min = 0
-        self.max = 0
-        self.mean = 0
-        self.std = 0
         self._max_data_size = kwargs.get('max_data_size', 10)
         self._data = deque(maxlen=self._max_data_size)
         self._statistics = check_for_module('statistics')
@@ -90,27 +94,25 @@ class CissSensor(AppBase):
         if timestamp is None:
             timestamp = time.time()
         self.value_timestamp = timestamp
-        self.value = float(value)
-        self.min = min(self.min, self.value)
-        self.max = max(self.max, self.value) 
-        
+        self.value = int(value)
+        self._value['timestamp'] = self.value_timestamp
+        self._value['current'] = self.value
+        self._value['min'] = min(self._value['min'], self.value)
+        self._value['max'] = max(self._value['max'], self.value)        
         # ToDo      
         if self._statistics:  
-            self.mean = statistics.mean(self._data)
-            self.std = statistics.stdev(self._data)
-        
+            self._value['mean'] = statistics.mean(self._data)
+            self._value['std'] = statistics.stdev(self._data)        
         self._data.append(self.value)
         return value  
     
-    def get_value(self, type=None):
-        return {
-            'timestamp' : self.value_timestamp,
-            'value': self.value,
-            'min': self.min,
-            'max': self.max,
-            'mean': self.mean,
-            'std': self.std,
-            }
+    def get_value(self, what=None):
+        if what is None:
+            return self._value
+        else:
+            return self._value[what]
+        return None
+
         
     def print_values(self):
         print("[%s] %s"%  (self.name, self.get_value(None)))
@@ -138,19 +140,13 @@ class CissXyzSensor(CissSensor):
         if self._z_sensor.update_value(value_z, timestamp) is None:
             return None       
         
-        return self.update_value((abs(float(value_x)) + abs(float(value_y)) + abs(float(value_z))), timestamp)
+        return self.update_value((abs(int(value_x)) + abs(int(value_y)) + abs(int(value_z))), timestamp)
   
-    def get_value(self, type=None):
+    def get_value(self, what=None, type=None):
         if type is None:            
-            return CissSensor.get_value(self)
-        elif type == 'x':
-            return self._x_sensor.getValue()
-        elif type == 'y':
-            return self._y_sensor.getValue()
-        elif type == 'z': 
-            return self._z_sensor.getValue()  
+            return CissSensor.get_value(self, what)
         else:
-            raise ValueError('Sensor type %s unknown'% type)              
+            return self.get_sensor(type).get_value(what)              
         return None
     
     def get_sensor(self, type):
@@ -298,11 +294,11 @@ class AppCissNode(AppBase, CISSNode):
         else:
             tmp = {}
             for id, sensor in self._sensors.items():
-                tmp[sensor.name] = sensor.value        
+                tmp[sensor.name] = sensor.get_value('current')      
                 if isinstance(sensor, CissXyzSensor):
-                    tmp[sensor.get_sensor('x').name] = sensor.get_sensor('x').value
-                    tmp[sensor.get_sensor('y').name] = sensor.get_sensor('y').value
-                    tmp[sensor.get_sensor('z').name] = sensor.get_sensor('z').value
+                    tmp[sensor.get_sensor('x').name] = sensor.get_value('current', 'x')
+                    tmp[sensor.get_sensor('y').name] = sensor.get_value('current','y')
+                    tmp[sensor.get_sensor('z').name] = sensor.get_value('current','z')
             print('[%s] %s'% (self.name, str(tmp)))
         return True
        
@@ -323,17 +319,7 @@ class AppCissNode(AppBase, CISSNode):
             return abs(tmp)
         else:
             return tmp
-    
-    @staticmethod
-    def calcXyzMaxValue(stream_data, sensor, summ=True):
-        tmpValue1 = AppCissNode.get_sensor_value(stream_data, sensor+'x', 0, True)
-        tmpValue2 = AppCissNode.get_sensor_value(stream_data, sensor+'y', 0, True)
-        tmpValue3 = AppCissNode.get_sensor_value(stream_data, sensor+'z', 0, True)   
-        if summ:        
-            return (tmpValue1+tmpValue2+tmpValue3)
-        else:
-            return max(tmpValue1, tmpValue2, tmpValue3)       
-    
+            
     def read_ciss_sensor_stream(self): 
         #self.log_debug('read_ciss_sensor_stream')         
         out = 0 
@@ -356,14 +342,32 @@ class AppCissNode(AppBase, CISSNode):
             else:
                 continue
             buffer = self.ser.read(length+1)
-            payload = CissUsbConnectord.conv_data(buffer)
+            payload = self.conv_data(buffer)
             payload.insert(0, length)
             out = ""
-            if CissUsbConnectord.check_payload(payload) == 1:
+            if self.check_payload(payload) == 1:
                 payload_found = 1
                 self.parse_payload(payload)    
                               
         return True
+    
+    @staticmethod            
+    def conv_data(data):
+        a = []
+        for ind in range(len(data)):
+            a.insert(ind, ord(data[ind]))
+        return a
+    
+    @staticmethod
+    def check_payload(payload):
+        eval = 0
+        for ind in range(len(payload)-1):
+            eval = eval ^ payload[ind]
+    
+        if eval == payload[len(payload)-1]:
+            return 1
+        else:
+            return 0
                 
     def parse_payload(self, payload):
         #self.log_debug('parse_payload') 
@@ -451,13 +455,17 @@ class AppCissContext(AppContext):
     def run_context(self):
         self.log_info('Run Context! ...')
         self._run = True
+        print_all = True
         while self._run == True: 
-            for id, ciss in self._ciss.items():
-                print(ciss.get_sensors())
-                
+            
+            for id, ciss in self._ciss.items():               
                 ciss.collect_sensor_stream_until(20, 5000)
+                if print_all:
+                    print_all = False
+                else:
+                    print_all = True                
+                ciss.print_sensor_values(print_all)
                 
-                ciss.print_sensor_values()
         return True
     
     def do_exit(self, reason):

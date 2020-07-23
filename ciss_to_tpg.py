@@ -73,15 +73,18 @@ class TpgCissContext(AppCissContext):
                 self.tpg_publish_sensor(ciss_node, sensor.get_sensor('z'))              
         return True
         
-    def tpg_publish_sensor(self, ciss_node, sensor):
-        if sensor.value_timestamp is None:
-            vtag = Tag(Value(sensor.value), Time.now(), sensor.unit)
+    def tpg_publish_sensor(self, ciss_node, sensor):       
+        if sensor.value_timestamp is None:           
+             at = Time.now()
         else:
-            vtag = Tag(Value(sensor.value), Time.now(), sensor.unit)
-        tag_name = ('%s-%s-current'% (ciss_node.name, sensor.name))
+             # ToDo
+             at = Time.now()
+        which_value = 'current'
+        tValue = Value(sensor.get_value(which_value))    
+        vtag = Tag(tValue, at, sensor.unit)
+        tag_name = ('%s-%s-%s'% (ciss_node.name, sensor.name, which_value))
         self._tagV2_obj.publish(self._vtag_template_name, tag_name, vtag)            
         self.log_debug('tagV2 publish to %s tag %s = %s', self._vtag_template_name, tag_name, str(vtag.value()))
-        
         return True
     
 '''
@@ -93,7 +96,7 @@ def main(assigned_args = None):
         cargs = main_argparse(assigned_args)
         my_app = TpgCissContext(cargs, 
                                 app_name='ciss_tpg', 
-                                logger=AppContext.initLogger(cargs.verbose_level, cargs.File_level, None, True))       
+                                logger=AppContext.initLogger(cargs.verbose_level, cargs.file_level, None, True))       
         if not my_app.init_context():
             # debug_print_classes() # debuging modules loaded
             return my_app.exit_context(1)
