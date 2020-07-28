@@ -1,15 +1,17 @@
 #!/usr/bin/env python2
 '''
 Bosch CISS sensor 
+'''
 
+'''
 Change log
-0.1.0 - 2020-07-07 - cg
+0.2.0 - 2020-07-07 - cg
     Initial version
 '''
 
 __author__ = "Christian G."
 __license__ = "MIT"
-__version__ = '0.1.0'
+__version__ = '0.2.0'
 __status__ = "beta"
     
 import sys
@@ -21,52 +23,46 @@ from collections import deque
 from chgrcodebase import *
 from CissUsbConnectord_v2_3_1 import CISSNode
 
-def check_for_module(module):
-    try:
-        __import__('imp').find_module(module)
-        found = True
-    except ImportError:
-        found = False
-    return found
 
-class CissSensorName(Enum):
-    ACCL = 'Acceleration'
-    GYRO = 'Gyroscope'
-    MAGN = 'Magnetometer'
-    TEMP = 'Temperature'
-    HUMI = 'Humidity'
-    PRES = 'Pressure'
-    LIGHT = 'LIGHT'
-    NOISE = 'Noise'
+# Sensor Index 
+class SnIx(Enum):
+    ACCL = 'Accl'
+    ACCL_X = 'Accl_x'
+    ACCL_Y = 'Accl_y'
+    ACCL_Z = 'Accl_z'
+    GYRO = 'Gyro'
+    GYRO_X = 'Gyro_x'
+    GYRO_Y = 'Gyro_y'
+    GYRO_Z = 'Gyro_z'
+    MAGN = 'Magn'
+    MAGN_X = 'Magn_x'
+    MAGN_Y = 'Magn_y'
+    MAGN_Z = 'Magn_z'
+    TEMP = 'Temp'
+    HUMI = 'Humi'
+    PRES = 'Pres'
+    LIGHT = 'Ligh'
+    NOISE = 'Nois' 
     
-class CissSensorNameShort(Enum):
-    SN_ACCL = 'Accl'
-    SN_ACCL_X = 'Accl_x'
-    SN_ACCL_Y = 'Accl_y'
-    SN_ACCL_Z = 'Accl_z'
-    SN_GYRO = 'Gyro'
-    SN_GYRO_X = 'Gyro_x'
-    SN_GYRO_Y = 'Gyro_y'
-    SN_GYRO_Z = 'Gyro_z'
-    SN_MAGN = 'Magn'
-    SN_MAGN_X = 'Magn_x'
-    SN_MAGN_Y = 'Magn_y'
-    SN_MAGN_Z = 'Magn_z'
-    SN_TEMP = 'Temp'
-    SN_HUMI = 'Humi'
-    SN_PRES = 'Pres'
-    SN_LIGHT = 'Ligh'
-    SN_NOISE = 'Nois'
-    
-    def __str__(self):
-        return str(self.value)    
+    def ix(self):  
+        return self.value 
 
 class CissSensor(AppBase):
     
-    def __init__(self, id='cissSensor', **kwargs):
+    def __init__(self, node, id='cissSensor', **kwargs):
         AppBase.__init__(self, id, **kwargs)
-        self.name = kwargs.get('name', self.get_base_id())
-        self.unit = kwargs.get('unit')
+        self.ciss_node = node
+        self._ext_conf = kwargs.get('conf', None)  
+        if not isinstance(self._ext_conf, dict):
+            self._ext_conf = dict()
+        self.name = self._ext_conf.get('name', self.get_base_id())
+        self.unit = self._ext_conf.get('unit', 'n/a')        
+        self.enabled = self._ext_conf.get('enabled', 0)
+        self.publish = self._ext_conf.get('publish', 0)
+        self.stream_enabled = self._ext_conf.get('stream_enabled', 0)
+        self.stream_period = self._ext_conf.get('stream_period', 10)
+        self.event_enabled = self._ext_conf.get('event_enabled', 0)
+        self.event_threshold = self._ext_conf.get('event_threshold', 0)       
         self.value_timestamp = None
         self._value = {
             'timestamp': None,
@@ -79,57 +75,87 @@ class CissSensor(AppBase):
         self.value = 0
         self._max_data_size = kwargs.get('max_data_size', 10)
         self._data = deque(maxlen=self._max_data_size)
-        self._statistics = check_for_module('statistics')
+        self._statistics = self._ext_conf.get('enable_statistics', 0)
+        if self._statistics:
+            if not check_for_module('statistics'):
+                self._statistics = 0
+                self.log_error('Statistics Module not found! Disable Statistics')            
+        
+        self._on_sensor_update = None
+        self.log_info('CISS Sensor %s', self.name)        
+        return
         
         
     def update_value_ext(self, stream_data):
+        if not self.enabled:
+            return None
         value = stream_data.get(self.get_base_id(), None)
-        if value is None:
+        if value is None or value == "":
             return None        
         return self.update_value(value, stream_data.get('timestamp', None))
     
     def update_value(self, value, timestamp):
         if value is None or value == "":
             return None
+        
         if timestamp is None:
             timestamp = time.time()
-        self.value_timestamp = timestamp
-        self.value = int(value)
-        self._value['timestamp'] = self.value_timestamp
+        
+        self.value = value
+        self._value['timestamp'] = timestamp
         self._value['current'] = self.value
-        self._value['min'] = min(self._value['min'], self.value)
-        self._value['max'] = max(self._value['max'], self.value)        
+        
+        if self.value_timestamp is None:
+            self._value['max'] = self.value
+            self._value['min'] = self.value        
+        else:
+            self._value['max'] = max(self._value['max'], self.value)
+            self._value['min'] = min(self._value['min'], self.value)
+        
+        self.value_timestamp = timestamp
+        self._data.append(self.value)        
         # ToDo      
         if self._statistics:  
             self._value['mean'] = statistics.mean(self._data)
             self._value['std'] = statistics.stdev(self._data)        
-        self._data.append(self.value)
+        
+        if self._on_sensor_update:
+            self._on_sensor_update(sensor=self)
+            
         return value  
     
-    def get_value(self, what=None):
+    def get_value(self, what=None, type=None):
         if what is None:
             return self._value
         else:
             return self._value[what]
         return None
-
-        
+       
     def print_values(self):
         print("[%s] %s"%  (self.name, self.get_value(None)))
+        
+    def set_on_update_callback(self, callback):
+        self._on_sensor_update = callback
+              
 
 class CissXyzSensor(CissSensor):
     
-    def __init__(self, id='cissXyzSensor', **kwargs):
-        CissSensor.__init__(self, id, **kwargs)
-        self._x_sensor = CissSensor(("%s_%s"% (id,'x')), max_data_size=self._max_data_size)
-        self._y_sensor = CissSensor(("%s_%s"% (id,'y')), max_data_size=self._max_data_size)
-        self._z_sensor = CissSensor(("%s_%s"% (id,'z')), max_data_size=self._max_data_size)
+    def __init__(self, node, id='cissXyzSensor', **kwargs):
+        CissSensor.__init__(self, node, id, **kwargs)
+        self.extra_conf = self._ext_conf.get('range', 0)  
+        self._x_sensor = CissSensor(self.ciss_node, ("%s_%s"% (id,'x')), max_data_size=self._max_data_size, logger=self.get_logger())
+        self._y_sensor = CissSensor(self.ciss_node, ("%s_%s"% (id,'y')), max_data_size=self._max_data_size, logger=self.get_logger())
+        self._z_sensor = CissSensor(self.ciss_node, ("%s_%s"% (id,'z')), max_data_size=self._max_data_size, logger=self.get_logger())
         
     def update_value_ext(self, stream_data):
+        if not self.enabled:
+            return None
         value_x = stream_data.get(self._x_sensor.get_base_id(), None)
+        if value_x is None or value_x == "":
+            return None            
         value_y = stream_data.get(self._y_sensor.get_base_id(), None)
         value_z = stream_data.get(self._z_sensor.get_base_id(), None)        
-        if value_x is None or value_y is None or value_z is None:
+        if value_y is None or value_z is None:
             return None
         
         timestamp = stream_data.get('timestamp', None)
@@ -167,28 +193,47 @@ class AppCissNode(AppBase, CISSNode):
         AppBase.__init__(self, id, **kwargs)
         self._ext_conf = kwargs.get('conf', {})  
         self.name = self._ext_conf.get('name', 'Dummy')
-        self._ciss_legacy_ini = self._ext_conf.get('ini_file', 'sensor.ini')
         self._serial_port = self._ext_conf.get('com_port', '/dev/ttyACM0')
         self._serial_stop = False
         
-        self._stream_data = deque(maxlen=kwargs.get('max_data_size', 100))  
+        self._stream_data = deque(maxlen=kwargs.get('max_data_size', 100))
+        if 'sensors' not in self._ext_conf or not isinstance(self._ext_conf['sensors'], dict):
+            raise ValueError('Sensor configurations messing')
+
         self._sensors = {
-            CissSensorNameShort.SN_ACCL.value: CissXyzSensor(CissSensorNameShort.SN_ACCL.value),
-            CissSensorNameShort.SN_GYRO.value: CissXyzSensor(CissSensorNameShort.SN_GYRO.value),
-            CissSensorNameShort.SN_MAGN.value: CissXyzSensor(CissSensorNameShort.SN_MAGN.value),
-            CissSensorNameShort.SN_TEMP.value: CissSensor(CissSensorNameShort.SN_TEMP.value),
-            CissSensorNameShort.SN_HUMI.value: CissSensor(CissSensorNameShort.SN_HUMI.value),
-            CissSensorNameShort.SN_PRES.value: CissSensor(CissSensorNameShort.SN_PRES.value),
-            CissSensorNameShort.SN_LIGHT.value: CissSensor(CissSensorNameShort.SN_LIGHT.value),
-            CissSensorNameShort.SN_NOISE.value: CissSensor(CissSensorNameShort.SN_NOISE.value)            
+            SnIx.ACCL.value: CissXyzSensor(self, SnIx.ACCL.value, 
+                                            conf=self._ext_conf['sensors'].get(SnIx.ACCL.value),
+                                            logger=self.get_logger()),
+            SnIx.GYRO.value: CissXyzSensor(self, SnIx.GYRO.value, 
+                                            conf=self._ext_conf['sensors'].get(SnIx.GYRO.value),
+                                            logger=self.get_logger()),
+            SnIx.MAGN.value: CissXyzSensor(self, SnIx.MAGN.value, 
+                                            conf=self._ext_conf['sensors'].get(SnIx.MAGN.value),
+                                            logger=self.get_logger()),
+            SnIx.TEMP.value: CissSensor(self, SnIx.TEMP.value, 
+                                            conf=self._ext_conf['sensors'].get(SnIx.TEMP.value),
+                                            logger=self.get_logger()),
+            SnIx.HUMI.value: CissSensor(self, SnIx.HUMI.value, 
+                                            conf=self._ext_conf['sensors'].get(SnIx.HUMI.value),
+                                            logger=self.get_logger()),
+            SnIx.PRES.value: CissSensor(self, SnIx.PRES.value, 
+                                            conf=self._ext_conf['sensors'].get(SnIx.PRES.value),
+                                            logger=self.get_logger()),
+            SnIx.LIGHT.value: CissSensor(self, SnIx.LIGHT.value, 
+                                            conf=self._ext_conf['sensors'].get(SnIx.LIGHT.value),
+                                            logger=self.get_logger()),
+            SnIx.NOISE.value: CissSensor(self, SnIx.NOISE.value, 
+                                            conf=self._ext_conf['sensors'].get(SnIx.NOISE.value),
+                                            logger=self.get_logger())            
             }  
-        self.ser = serial.Serial()
-        self.ser.baudrate = 19200
-        self.ser.timeout = 1
+        self.ser = serial.Serial(baudrate=19200, timeout=1)
         self.ser.port = self._serial_port        
         CISSNode.__init__(self)  
         return 
     
+    '''
+    CISSNode function
+    '''
     def get_ini_config(self):
         global sensor_id_glbl
         global iniFileLocation
@@ -198,23 +243,72 @@ class AppCissNode(AppBase, CISSNode):
         global printInformation_Conf        
         
         sensor_id_glbl = self.name
-        iniFileLocation = self._ciss_legacy_ini 
-        printInformation = True
-        printInformation_Conf = True         
+        self.sensorid = self.name
         
-        CISSNode.get_ini_config(self)
+        iniFileLocation = None
+        printInformation = self._ext_conf.get('ini_print', True)
+        printInformation_Conf = self._ext_conf.get('ini_print', True)         
+
+
+        #sample_period_inert_us = self._ext_conf.get('sample_period_inert', 100000)
+        #sample_period_env_us = self._ext_conf.get('sample_period_env', 1000000)/1000000 
+          
+        if self.get_sensor(SnIx.TEMP.value).stream_enabled \
+            or self.get_sensor(SnIx.HUMI.value).stream_enabled \
+            or self.get_sensor(SnIx.PRES.value).stream_enabled:
+            self.streaminglist["env"].streaming_enabled = True
+            self.streaminglist["env"].streaming_period = max(self.get_sensor(SnIx.TEMP.value).stream_period,
+                                                             self.get_sensor(SnIx.HUMI.value).stream_period,
+                                                             self.get_sensor(SnIx.PRES.value).stream_period)
+        else:
+            self.streaminglist["env"].streaming_enabled = False
+                         
+        self.streaminglist["light"].streaming_enabled = self.get_sensor(SnIx.LIGHT.value).stream_enabled
+        self.streaminglist["light"].streaming_period = self.get_sensor(SnIx.LIGHT.value).stream_period
+               
+        self.streaminglist["acc"].streaming_enabled = self.get_sensor(SnIx.ACCL.value).stream_enabled
+        self.streaminglist["acc"].streaming_period = self.get_sensor(SnIx.LIGHT.value).stream_period
         
-        if not os.path.exists(self.port):
-            raise ValueError('Serial Port %s not found'% self.port)
+        self.streaminglist["mag"].streaming_enabled = self.get_sensor(SnIx.MAGN.value).stream_enabled
+        self.streaminglist["mag"].streaming_period = self.get_sensor(SnIx.LIGHT.value).stream_period
+        
+        self.streaminglist["gyr"].streaming_enabled = self.get_sensor(SnIx.GYRO.value).stream_enabled
+        self.streaminglist["gyr"].streaming_period = self.get_sensor(SnIx.LIGHT.value).stream_period
+        
+        if self.get_sensor(SnIx.TEMP.value).event_enabled \
+            or self.get_sensor(SnIx.HUMI.value).event_enabled \
+            or self.get_sensor(SnIx.PRES.value).event_enabled:
+            self.streaminglist["env"].event_enabled = True
+            self.eventlist["env"].event_threshold = [int(self.get_sensor(SnIx.TEMP.value).event_threshold),
+                                                     int(self.get_sensor(SnIx.HUMI.value).event_threshold),
+                                                     int(self.get_sensor(SnIx.PRES.value).event_threshold)]
+        else:
+            self.streaminglist["env"].event_enabled = False
+        self.eventlist["acc"].event_enabled = self.get_sensor(SnIx.ACCL.value).event_enabled
+        self.eventlist["acc"].event_threshold = [int(self.get_sensor(SnIx.ACCL.value).event_threshold)]
+        self.eventlist["mag"].event_enabled = self.get_sensor(SnIx.MAGN.value).event_enabled
+        self.eventlist["mag"].event_threshold = [int(self.get_sensor(SnIx.MAGN.value).event_threshold)]
+        self.eventlist["gyr"].event_enabled = self.get_sensor(SnIx.GYRO.value).event_enabled
+        self.eventlist["gyr"].event_threshold = [int(self.get_sensor(SnIx.GYRO.value).event_threshold)]
+        self.eventlist["light"].event_enabled = self.get_sensor(SnIx.LIGHT.value).event_enabled
+        self.eventlist["light"].event_threshold = [int(self.get_sensor(SnIx.LIGHT.value).event_threshold)]
+        #noise is not actually not streamed over USB 
+        self.eventlist["noise"].event_enabled = self.get_sensor(SnIx.NOISE.value).event_enabled
+        self.eventlist["noise"].event_threshold = [int(self.get_sensor(SnIx.NOISE.value).event_threshold)]
+        
+        self.acc_range = int(self.get_sensor(SnIx.ACCL.value).extra_conf)
+        
+        if not os.path.exists(self._serial_port):
+            raise ValueError('Serial Port %s not found'% self._serial_port)
             return False
-        self._serial_port = self.port 
+
         self.ser.port = self._serial_port
         return True
     
     def update_sensor_values(self, stream_data):
         for name, sensor in self._sensors.items():
             sensor.update_value_ext(stream_data)        
-        return True
+        return True  
     
     def process_stream_data(self, number, timeout=None):
         self.log_debug('process_stream_data(%s, %s)', number, timeout) 
@@ -243,9 +337,9 @@ class AppCissNode(AppBase, CISSNode):
                 return True            
         return True
         
-    def collect_sensor_stream_until(self, number, timeout=None, loop_delay=0.1):
+    def collect_sensor_stream_until(self, number, timeout=0, loop_delay=0.1):
         self.log_info('collect_sensor_stream(%s, %s)', number, timeout) 
-        if timeout != None:
+        if timeout != 0:
             t = AppTimer()
             t.start()
         ix = 0
@@ -261,7 +355,7 @@ class AppCissNode(AppBase, CISSNode):
             except serial.SerialException as e:
                 self.log_exception('Read Serial Stream Exception!')
             
-            if timeout != None:
+            if timeout != 0:
                 if t.is_elapsed(timeout):
                     #self.log_debug('Collect time elapsed!')
                     break
@@ -276,9 +370,8 @@ class AppCissNode(AppBase, CISSNode):
             raise ValueError('Sensor %s unknown!'% short_name)
         return None
     
-    def get_sensor_value(self, short_name, type=None):
-        sensor = self._get_sensor(short_name)
-        return sensor.get_value(type)
+    def get_sensor_value(self, short_name, what=None, type=None):
+        return self.get_sensor(short_name).get_value(what, type)
     
     def get_sensors(self):
         return self._sensors
@@ -322,7 +415,7 @@ class AppCissNode(AppBase, CISSNode):
             
     def read_ciss_sensor_stream(self): 
         #self.log_debug('read_ciss_sensor_stream')         
-        out = 0 
+        out = "" 
         sof = "\xFE"
         data = []
         sub_payload = []
@@ -351,6 +444,9 @@ class AppCissNode(AppBase, CISSNode):
                               
         return True
     
+    '''
+    CISSNode function
+    '''
     @staticmethod            
     def conv_data(data):
         a = []
@@ -358,6 +454,9 @@ class AppCissNode(AppBase, CISSNode):
             a.insert(ind, ord(data[ind]))
         return a
     
+    '''
+    CISSNode function
+    '''
     @staticmethod
     def check_payload(payload):
         eval = 0
@@ -368,7 +467,10 @@ class AppCissNode(AppBase, CISSNode):
             return 1
         else:
             return 0
-                
+
+    '''
+    CISSNode function
+    '''            
     def parse_payload(self, payload):
         #self.log_debug('parse_payload') 
         payload.pop(0)
@@ -394,30 +496,34 @@ class AppCissNode(AppBase, CISSNode):
         tempDict = {    
             'id': id,
             'timestamp': tstamp,
-             CissSensorNameShort.SN_ACCL_X.value: buff[0],
-             CissSensorNameShort.SN_ACCL_Y.value: buff[1],
-             CissSensorNameShort.SN_ACCL_Z.value: buff[2],
+             SnIx.ACCL_X.value: buff[0],
+             SnIx.ACCL_Y.value: buff[1],
+             SnIx.ACCL_Z.value: buff[2],
              
-             CissSensorNameShort.SN_GYRO_X.value: buff[3],
-             CissSensorNameShort.SN_GYRO_Y.value: buff[4],
-             CissSensorNameShort.SN_GYRO_Z.value: buff[5],
+             SnIx.GYRO_X.value: buff[3],
+             SnIx.GYRO_Y.value: buff[4],
+             SnIx.GYRO_Z.value: buff[5],
              
-             CissSensorNameShort.SN_MAGN_X.value: buff[6],
-             CissSensorNameShort.SN_MAGN_Y.value: buff[7],
-             CissSensorNameShort.SN_MAGN_Z.value: buff[8],
+             SnIx.MAGN_X.value: buff[6],
+             SnIx.MAGN_Y.value: buff[7],
+             SnIx.MAGN_Z.value: buff[8],
              
-             CissSensorNameShort.SN_TEMP.value: buff[9],
-             CissSensorNameShort.SN_HUMI.value: buff[10],
-             CissSensorNameShort.SN_PRES.value: buff[11],
-             CissSensorNameShort.SN_LIGHT.value: buff[12],
-             CissSensorNameShort.SN_NOISE.value: buff[13] 
+             SnIx.TEMP.value: buff[9],
+             SnIx.HUMI.value: buff[10],
+             SnIx.PRES.value: buff[11],
+             SnIx.LIGHT.value: buff[12],
+             SnIx.NOISE.value: buff[13] 
             }
-        self.log_debug('write_to_dict %s', tempDict)
+        #self.log_debug('write_to_dict %s', tempDict)
         return tempDict
-    
+
+    '''
+    CISSNode function
+    '''
     def connect(self):
         if self._serial_stop:
-            raise ValueError('Serial Port in stop mode!')
+            self.log_error('Serial Port in stop mode!')
+            return False
         return self.ser.open()            
     
     def do_exit(self):
@@ -442,31 +548,35 @@ class AppCissContext(AppContext):
         if 'ciss_nodes' not in self._ext_conf:
             self.log_error('Missing Ciss Node configuration!')
             return False
-        for node in self._ext_conf['ciss_nodes']:
-            if 'id' not in node:
-                self.log_error('Missing Ciss Node id in configuration')
-                return False
-            if node['id'] in self._ciss:
-                self.log_error('Node ID %s already used!', node['id'])
-                return False
-            self._ciss[node['id']] = AppCissNode(node['id'], conf=node, logger=self.get_logger())
+        for id, node in self._ext_conf['ciss_nodes'].items():
+            self._ciss[id] = AppCissNode(id, conf=node, logger=self.get_logger())
+
         return True
     
     def run_context(self):
         self.log_info('Run Context! ...')
+        
+        for id, ciss in self._ciss.items():
+            for id, sensor in ciss.get_sensors().items():
+                sensor.set_on_update_callback(self.on_sensor_upate_callback)        
+        
         self._run = True
-        print_all = True
+        print_all = 10
         while self._run == True: 
             
             for id, ciss in self._ciss.items():               
-                ciss.collect_sensor_stream_until(20, 5000)
-                if print_all:
-                    print_all = False
+                ciss.collect_sensor_stream_until(20, 5000, 0.1)
+                if print_all < 10:
+                    ciss.print_sensor_values(False)
                 else:
-                    print_all = True                
-                ciss.print_sensor_values(print_all)
+                    ciss.print_sensor_values(True) 
+                    print_all = 0
+                print_all += 1               
                 
         return True
+    
+    def on_sensor_upate_callback(self, sensor):
+        self.log_debug('Sensor %s Update! %s = %s', sensor.name, sensor.value_timestamp, sensor.value)
     
     def do_exit(self, reason):
         self._run = False

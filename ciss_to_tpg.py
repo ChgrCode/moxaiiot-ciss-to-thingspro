@@ -1,15 +1,17 @@
 #!/usr/bin/env python2
 '''
 Publish Bosch CISS sensor to ThingsPro Gateway  
+'''
 
+'''
 Change log
-0.1.0 - 2020-07-07 - cg
+0.2.0 - 2020-07-07 - cg
     Initial version
 '''
 
 __author__ = "Christian G."
 __license__ = "MIT"
-__version__ = '0.1.0'
+__version__ = '0.2.0'
 __status__ = "beta"
 
 import sys
@@ -50,15 +52,27 @@ class TpgCissContext(AppCissContext):
 
         return True
     
+    def on_sensor_upate_callback(self, sensor):
+        self.log_debug('Sensor %s Update! %s = %s', sensor.name, sensor.value_timestamp, sensor.value)
+        return self.tpg_publish_sensor(sensor)
+ 
+    
     def run_context(self):
         self.log_info('Run Context! ...')
+        
+        if self._tpg_publish_interval == 0:
+            for id, ciss in self._ciss.items():
+                for id, sensor in ciss.get_sensors().items():
+                    sensor.set_on_update_callback(self.on_sensor_upate_callback) 
+        
         self._run = True                
         while self._run == True: 
             for id, ciss_node in self._ciss.items():
-                ciss_node.collect_sensor_stream_until(100, self._tpg_publish_interval)
+                ciss_node.collect_sensor_stream_until(100, self._tpg_publish_interval, 0.1)
                 ciss_node.print_sensor_values(False)
-                self.tpg_publish(ciss_node)     
-                self.log_info('Published Sensor data to TPG %s', self._vtag_template_name)           
+                if self._tpg_publish_interval != 0:
+                    self.tpg_publish(ciss_node)     
+                          
         return True
     
     def tpg_publish(self, ciss_node):
@@ -66,26 +80,41 @@ class TpgCissContext(AppCissContext):
         if not isinstance(ciss_node, AppCissNode):
             raise ValueError('Invalid Ciss Node object!')
         for s_id, sensor in ciss_node.get_sensors().items():
-            self.tpg_publish_sensor(ciss_node, sensor)
+            self.tpg_publish_sensor(sensor)
             if isinstance(sensor, CissXyzSensor):
-                self.tpg_publish_sensor(ciss_node, sensor.get_sensor('x'))
-                self.tpg_publish_sensor(ciss_node, sensor.get_sensor('y'))
-                self.tpg_publish_sensor(ciss_node, sensor.get_sensor('z'))              
+                self.tpg_publish_sensor(sensor.get_sensor('x'))
+                self.tpg_publish_sensor(sensor.get_sensor('y'))
+                self.tpg_publish_sensor(sensor.get_sensor('z'))  
+        self.log_info('Published Sensor data to TPG %s', self._vtag_template_name) 
         return True
         
-    def tpg_publish_sensor(self, ciss_node, sensor):       
+    def tpg_publish_sensor(self, sensor): 
+        if not sensor.publish:
+            return True      
         if sensor.value_timestamp is None:           
              at = Time.now()
         else:
              # ToDo
              at = Time.now()
-        which_value = 'current'
-        tValue = Value(sensor.get_value(which_value))    
-        vtag = Tag(tValue, at, sensor.unit)
-        tag_name = ('%s-%s-%s'% (ciss_node.name, sensor.name, which_value))
-        self._tagV2_obj.publish(self._vtag_template_name, tag_name, vtag)            
-        self.log_debug('tagV2 publish to %s tag %s = %s', self._vtag_template_name, tag_name, str(vtag.value()))
+        if sensor.publish == 2:
+            if sensor._statistics: 
+                value_list = ['current', 'min', 'max', 'mean', 'std']
+            else:
+                value_list = ['current', 'min', 'max']
+        else:
+            value_list = ['current']
+        for what in value_list:
+            tValue = Value(sensor.get_value(what))    
+            vtag = Tag(tValue, at, sensor.unit)
+            tag_name = self.tpg_publish_tag_name(sensor.ciss_node.name, sensor.name, what)
+            self._tagV2_obj.publish(self._vtag_template_name, tag_name, vtag)            
+            self.log_debug('tagV2 publish to %s tag %s = %s', self._vtag_template_name, tag_name, str(vtag.value()))
         return True
+    
+    @staticmethod
+    def tpg_publish_tag_name(node_name, sensor_name, which):
+        tag_name = ('%s-%s-%s'% (node_name, sensor_name, which))
+        return tag_name
     
 '''
 '''

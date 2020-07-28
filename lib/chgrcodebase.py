@@ -259,8 +259,9 @@ class AppContext(AppBase):
             global_level = logging.ERROR
             if console_level != None:
                 global_level = AppBase.vlevel_2_log_level(console_level)
+
             logging.basicConfig(format='%(asctime)s - %(name)s.%(threadName)s : %(levelname)+7s : %(message)s',
-                                level = 0, 
+                                level = global_level, 
                                 handlers=[logging.NullHandler()])   
 
         _logger = logging.getLogger(__name__)
@@ -415,6 +416,7 @@ class TestAppContext(AppContext):
             self.log_info(config)            
         return True 
 
+
 '''
 '''
 def debug_print_classes(what=__name__):
@@ -427,6 +429,15 @@ def debug_print_classes(what=__name__):
     print('End of modules')
     return
 
+'''
+'''
+def check_for_module(module):
+    try:
+        __import__('imp').find_module(module)
+        found = True
+    except ImportError:
+        found = False
+    return found
 
 '''
 '''
