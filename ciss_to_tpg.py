@@ -5,13 +5,13 @@ Publish Bosch CISS sensor to ThingsPro Gateway
 
 '''
 Change log
-0.2.0 - 2020-07-07 - cg
+0.3.0 - 2020-07-07 - cg
     Initial version
 '''
 
 __author__ = "Christian G."
 __license__ = "MIT"
-__version__ = '0.2.0'
+__version__ = '0.3.0'
 __status__ = "beta"
 
 import sys
@@ -55,8 +55,7 @@ class TpgCissContext(AppCissContext):
     def on_sensor_upate_callback(self, sensor):
         self.log_debug('Sensor %s Update! %s = %s', sensor.name, sensor.value_timestamp, sensor.value)
         return self.tpg_publish_sensor(sensor)
- 
-    
+  
     def run_context(self):
         self.log_info('Run Context! ...')
         
@@ -65,11 +64,16 @@ class TpgCissContext(AppCissContext):
                 for id, sensor in ciss.get_sensors().items():
                     sensor.set_on_update_callback(self.on_sensor_upate_callback) 
         
-        self._run = True                
+        self._run = True         
+        print_all = 10       
         while self._run == True: 
             for id, ciss_node in self._ciss.items():
                 ciss_node.collect_sensor_stream_until(100, self._tpg_publish_interval, 0.1)
-                ciss_node.print_sensor_values(False)
+                if self._logger_level <= AppLogLevel.DEBUG.value:
+                    if print_all >= 10:
+                        ciss_node.print_sensor_values(True) 
+                        print_all = 0
+                    print_all += 1
                 if self._tpg_publish_interval != 0:
                     self.tpg_publish(ciss_node)     
                           
@@ -86,6 +90,8 @@ class TpgCissContext(AppCissContext):
                 self.tpg_publish_sensor(sensor.get_sensor('y'))
                 self.tpg_publish_sensor(sensor.get_sensor('z'))  
         self.log_info('Published Sensor data to TPG %s', self._vtag_template_name) 
+        if self._logger_level <= AppLogLevel.INFO.value:
+            ciss_node.print_sensor_values(False)
         return True
         
     def tpg_publish_sensor(self, sensor): 
@@ -104,7 +110,7 @@ class TpgCissContext(AppCissContext):
         else:
             value_list = ['current']
         for what in value_list:
-            tValue = Value(sensor.get_value(what))    
+            tValue = Value(int(sensor.get_value(what)))    
             vtag = Tag(tValue, at, sensor.unit)
             tag_name = self.tpg_publish_tag_name(sensor.ciss_node.name, sensor.name, what)
             self._tagV2_obj.publish(self._vtag_template_name, tag_name, vtag)            

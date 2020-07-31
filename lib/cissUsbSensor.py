@@ -15,14 +15,16 @@ __version__ = '0.2.0'
 __status__ = "beta"
     
 import sys
-import serial
+import serial        
+
 from enum import Enum
 from collections import deque
-
 
 from chgrcodebase import *
 from CissUsbConnectord_v2_3_1 import CISSNode
 
+if check_for_module('statistics'):
+    import statistics  
 
 # Sensor Index 
 class SnIx(Enum):
@@ -48,6 +50,7 @@ class SnIx(Enum):
         return self.value 
 
 class CissSensor(AppBase):
+    _has_statistics_mod = check_for_module('statistics')
     
     def __init__(self, node, id='cissSensor', **kwargs):
         AppBase.__init__(self, id, **kwargs)
@@ -74,15 +77,18 @@ class CissSensor(AppBase):
             }
         self.value = 0
         self._max_data_size = kwargs.get('max_data_size', 10)
-        self._data = deque(maxlen=self._max_data_size)
         self._statistics = self._ext_conf.get('enable_statistics', 0)
-        if self._statistics:
-            if not check_for_module('statistics'):
-                self._statistics = 0
-                self.log_error('Statistics Module not found! Disable Statistics')            
+        if self._statistics and self._statistics > 1 \
+            and self._statistics <= 100:
+            self._max_data_size = self._statistics
         
+        if self._statistics and not self._has_statistics_mod:
+            self._statistics = 0
+            self.log_error('Statistics Module not found! Disable Statistics')       
+        
+        self._data = deque(maxlen=self._max_data_size)
         self._on_sensor_update = None
-        self.log_info('CISS Sensor %s', self.name)        
+        self.log_info('CISS Sensor %s statistics %d, max_values %d', self.name, self._statistics, self._max_data_size)        
         return
         
         
@@ -115,7 +121,7 @@ class CissSensor(AppBase):
         self.value_timestamp = timestamp
         self._data.append(self.value)        
         # ToDo      
-        if self._statistics:  
+        if self._statistics and len(self._data) > 2:  
             self._value['mean'] = statistics.mean(self._data)
             self._value['std'] = statistics.stdev(self._data)        
         
@@ -339,9 +345,8 @@ class AppCissNode(AppBase, CISSNode):
         
     def collect_sensor_stream_until(self, number, timeout=0, loop_delay=0.1):
         self.log_info('collect_sensor_stream(%s, %s)', number, timeout) 
-        if timeout != 0:
-            t = AppTimer()
-            t.start()
+        t = AppTimer()
+        t.start()
         ix = 0
         while ix < number and not self._serial_stop:
             ix = ix + 1
@@ -361,6 +366,8 @@ class AppCissNode(AppBase, CISSNode):
                     break
             if loop_delay:
                 time.sleep(loop_delay)
+        
+        self.log_info('Collected %d times in %d ms', ix, t.get_elapsed())
         return True
     
     def get_sensor(self, short_name):
@@ -509,8 +516,8 @@ class AppCissNode(AppBase, CISSNode):
              SnIx.MAGN_Z.value: buff[8],
              
              SnIx.TEMP.value: buff[9],
-             SnIx.HUMI.value: buff[10],
-             SnIx.PRES.value: buff[11],
+             SnIx.PRES.value: buff[10],
+             SnIx.HUMI.value: buff[11],
              SnIx.LIGHT.value: buff[12],
              SnIx.NOISE.value: buff[13] 
             }
