@@ -5,7 +5,10 @@ Publish Bosch CISS sensor to ThingsPro Gateway
 
 '''
 Change log
-0.3.0 - 2020-07-07 - cg
+0.3.0 - 2020-08-05 - cg
+    Restructure/Updates
+    
+0.2.0 - 2020-07-07 - cg
     Initial version
 '''
 
@@ -27,9 +30,8 @@ class TpgCissContext(AppCissContext):
     def __init__(self, args, **kwargs):
         AppCissContext.__init__(self, args, **kwargs) 
         
-        self._modbus_obj = None
         self._tagV2_obj = None 
-        self._vtag_tags = None   
+        self._vtag_tags_published = 0   
         self._vtag_template_name = None
         
         self._tpg_publish_interval = 30000 # ms
@@ -47,7 +49,10 @@ class TpgCissContext(AppCissContext):
            
         if 'tpg_publish_interval' in self._ext_conf:         
             self._tpg_publish_interval = int(self._ext_conf['tpg_publish_interval'])*1000            
-        self.log_info('Publish interval set to %s ms', self._tpg_publish_interval)          
+        self.log_info('Publish interval set to %s ms', self._tpg_publish_interval)  
+        if self._console_args.publish_interval != None:
+            self._tpg_publish_interval =  self._console_args.publish_interval*1000  
+            self.log_info('Publish interval set to %s ms, from console arg!', self._tpg_publish_interval)     
         self._tagV2_obj = TagV2.instance()      
 
         return True
@@ -56,28 +61,63 @@ class TpgCissContext(AppCissContext):
         self.log_debug('Sensor %s Update! %s = %s', sensor.name, sensor.value_timestamp, sensor.value)
         return self.tpg_publish_sensor(sensor)
   
+    
     def run_context(self):
         self.log_info('Run Context! ...')
         
         if self._tpg_publish_interval == 0:
             for id, ciss in self._ciss.items():
                 for id, sensor in ciss.get_sensors().items():
-                    sensor.set_on_update_callback(self.on_sensor_upate_callback) 
+                    sensor.set_on_update_callback(self.on_sensor_upate_callback)      
         
-        self._run = True         
-        print_all = 10       
-        while self._run == True: 
-            for id, ciss_node in self._ciss.items():
-                ciss_node.collect_sensor_stream_until(100, self._tpg_publish_interval, 0.1)
+        if self._use_threading:
+            return self.run_threading_loop()
+        else:
+            return self.run_loop()
+                        
+        return True
+    
+    
+    def run_threading_loop(self):
+        self._run = True
+        
+        max_interval_time = 5000 # 5 seconds
+         
+        for id, ciss in self._ciss.items():
+           ciss.start_read_thread()    
+                        
+        while self._run is True: 
+            time.sleep(self._tpg_publish_interval/1000)
+            for id, ciss in self._ciss.items(): 
+                if not ciss.thread_is_alive() and self._run is True:
+                    self.log_error('Sensor %s Read Thread not alive! Restart', ciss.name)
+                    ciss.start_read_thread()
+                    continue
+                ciss.calc_statistics()                       
+                if self._logger_level <= AppLogLevel.DEBUG.value:          
+                    ciss.print_sensor_values(True)
+                if self._tpg_publish_interval != 0:
+                    self.tpg_publish(ciss)             
+                            
+        return True
+    
+    def run_loop(self):        
+        self._run = True
+        print_all = 10
+        
+        while self._run is True:             
+            for id, ciss in self._ciss.items():           
+                ciss.read_sensor_stream_until(100, self._tpg_publish_interval, 0.01)
+                ciss.calc_statistics()
                 if self._logger_level <= AppLogLevel.DEBUG.value:
                     if print_all >= 10:
-                        ciss_node.print_sensor_values(True) 
+                        ciss.print_sensor_values(True) 
                         print_all = 0
                     print_all += 1
                 if self._tpg_publish_interval != 0:
-                    self.tpg_publish(ciss_node)     
-                          
-        return True
+                    self.tpg_publish(ciss) 
+                        
+        return True    
     
     def tpg_publish(self, ciss_node):
         self.log_debug('tpg_publish')
@@ -85,13 +125,13 @@ class TpgCissContext(AppCissContext):
             raise ValueError('Invalid Ciss Node object!')
         for s_id, sensor in ciss_node.get_sensors().items():
             self.tpg_publish_sensor(sensor)
-            if isinstance(sensor, CissXyzSensor):
+            if isinstance(sensor, CissXyzSensor) and (sensor.publish & 0x04):
                 self.tpg_publish_sensor(sensor.get_sensor('x'))
                 self.tpg_publish_sensor(sensor.get_sensor('y'))
                 self.tpg_publish_sensor(sensor.get_sensor('z'))  
-        self.log_info('Published Sensor data to TPG %s', self._vtag_template_name) 
-        if self._logger_level <= AppLogLevel.INFO.value:
-            ciss_node.print_sensor_values(False)
+        self._vtag_tags_published += 1
+        self.log_info('Published %s Sensor data to TPG %s (%d)', ciss_node.name, self._vtag_template_name, self._vtag_tags_published) 
+
         return True
         
     def tpg_publish_sensor(self, sensor): 
@@ -102,8 +142,8 @@ class TpgCissContext(AppCissContext):
         else:
              # ToDo
              at = Time.now()
-        if sensor.publish == 2:
-            if sensor._statistics: 
+        if (sensor.publish & 0x02):
+            if sensor.statistics: 
                 value_list = ['current', 'min', 'max', 'mean', 'std']
             else:
                 value_list = ['current', 'min', 'max']
@@ -121,6 +161,28 @@ class TpgCissContext(AppCissContext):
     def tpg_publish_tag_name(node_name, sensor_name, which):
         tag_name = ('%s-%s-%s'% (node_name, sensor_name, which))
         return tag_name
+    
+'''
+'''
+def main_argparse(assigned_args = None):  
+    # type: (List)  
+    """
+    Parse and execute the call from command-line.
+    Args:
+        assigned_args: List of strings to parse. The default is taken from sys.argv.
+    Returns: 
+        Namespace list of args
+    """
+    import argparse, logging
+    parser = argparse.ArgumentParser(prog="appcmd", description=globals()['__doc__'], epilog="!!Note: .....")
+    parser.add_argument("-c", dest="config_file", metavar="Config File", help="Configuration file to use!")
+    parser.add_argument("-p", dest="com_port", metavar="Serial Port", help="Overwrite configurations serial Port to use!")
+    parser.add_argument("-i", dest="publish_interval", metavar="Publish Interval", type=int, help="Overwrite publish interval!")
+    parser.add_argument("-l", dest="file_level", metavar="File logging", type=int, action="store", default=None, help="Turn on file logging with level.")
+    parser.add_argument("-v", "--verbose", dest="verbose_level", action="count", default=None, help="Turn on console DEBUG mode. Max = -vvv")
+    parser.add_argument("-V", "--version", action="version", version=__version__) 
+
+    return parser.parse_args(assigned_args)
     
 '''
 '''

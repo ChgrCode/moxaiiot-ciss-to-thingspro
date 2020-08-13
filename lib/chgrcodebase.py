@@ -241,7 +241,8 @@ class AppContext(AppBase):
     def __init__(self, argc, **kwargs):
         AppBase.__init__(self, kwargs.get('app_name', 'Context'), **kwargs)
         self._console_args = argc
-        self._config_file = argc.config_file         
+        self._config_file = argc.config_file      
+        self._run = False   
         if argc.verbose_level != None:
             self._logger_level = AppBase.vlevel_2_log_level(argc.verbose_level)
             self.log_info('Enable Console debug verbose level %d', argc.verbose_level)
@@ -334,7 +335,8 @@ class AppContext(AppBase):
         return True
     
     def run_context(self):
-        self.log_info('Run Context! ...')                 
+        self.log_info('Run Context! ...')  
+        self._run = True               
         return True
     
     def do_exit(self, reason):
@@ -346,14 +348,21 @@ class AppContext(AppBase):
         else:
             exit_code = int(reason)  
         self.log_debug('Exit Context! ...')
+        self._run = False
         
-        self.do_exit(reason)
+        if not self.do_exit(reason):
+            self.log_error('Failed to clean exit App!')
                    
         self.log_info('Exit Context done! Reason [%s], with exit code %d!', str(reason), exit_code)           
         return exit_code
     
+    def stop_run_context(self, reason):
+        self.log_info('%s, Stopping ...', reason)
+        self._run = False
+        return True
+    
     def signal_exit_gracefully(self, signum, frame):
-        self.exit_context(signum)   
+        self.stop_run_context(signum)   
 
 
 class TestAppContext(AppContext):

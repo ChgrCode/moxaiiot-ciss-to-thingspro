@@ -99,13 +99,14 @@ unit: The unit used to publish the values. It's depending on the sensor and is o
 	
 enabled: Enables the sensor in main program, if not enabled no values are stored for this sensor.
 
-	"publish": 1
+	"publish": 6
 	
-publish: If "1" it will publish sensor values to ThingsPro Gateway. If "2”, it will publish all collected values including calculated values, like statistics (optional). “0” disables publishing.
+publish: Bit value, enables publishing. If "1" (0x01), publish current sensor values to ThingsPro Gateway. If "2” (0x02), publish all collected values including calculated values, like statistics (optional). If 4 (0x04) and for all xyz sensors, publish also all xyz values.  “0” disables publishing. 
+e.g.: 6 = 0000 0110 = publish all values if xyz also sub values.
 
 	"enable_statistics": 1
 	
-enable_statistics: Enables statistic information for sensor values. If set and Pythons statistics module is installed, it calculates "mean" and "std" values based on the last 10 collected values from CISS node.
+enable_statistics: Enables statistic information for sensor values. If set and Pythons statistics module is installed, it calculates "mean" and "std" values based on the last 10 (default) collected values from CISS node. A higher number then 10 will set the number of last collected values used for statistics.
 	
 	"stream_enabled": 1,
 	"stream_period": 100000,
@@ -114,6 +115,7 @@ enable_statistics: Enables statistic information for sensor values. If set and P
 	"range": 16,
 	
 These Values are based on the original Bosch CISS python script and are passed directly to the original CISSUsbConnectored.py script. Please check CISS sensor descriptions for details.
+For environmental sensors the max value from Temp, Humi, Pres is used.
 
 
 ### 4. Testing the configuration
@@ -122,7 +124,7 @@ Copy the project folder to UC e.g.: /home/moxa
 
 Check USB device name for CISS Sensor, check with 
 
-	$ dmesg | grep -i ciss
+	$ dmesg | grep -i ttyACM
 
 ajust the sensor.json configuration file if needed and execute the main script
 

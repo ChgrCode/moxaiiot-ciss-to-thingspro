@@ -6,7 +6,7 @@ retry_count=0
 while true;
 do
     python2 ./ciss_to_tpg.py $@
-    echo "ERROR: tpg_bosch_ciss.py returned with $?"
+    echo "ERROR: ciss_to_tpg.py returned with $?"
     retry_count=$((retry_count + 1))
     echo "Restart $retry_count in $retry_sleep seconds"
     echo

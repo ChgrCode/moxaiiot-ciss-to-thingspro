@@ -1,6 +1,6 @@
 {
 	"tpg_vtag_template": "CissSensor",
-	"tpg_publish_interval": 5,
+	"tpg_publish_interval": 1,
 	"ciss_nodes" : {
 		"cissACM0": {
 			"name": "CissACM0",
@@ -10,52 +10,52 @@
 			"sensors": {
 				"Accl": {
 					"name": "ACCL",
-					"unit": "n/a",
+					"unit": "mg",
 					"enabled": 1,
-					"publish": 2,
+					"publish": 6,
 					"stream_enabled": 1,
 					"stream_period": 100000,
 					"event_enabled": 0,
 					"event_threshold": 0,
 					"range": 16,
-					"enable_statistics": 100				
+					"enable_statistics": 10				
 				},
 				"Gyro": {
 					"name": "GYRO",
-					"unit": "n/a",
+					"unit": "d/s",
 					"enabled": 1,
 					"publish": 1,
 					"stream_enabled": 1,
-					"stream_period": 100000,
+					"stream_period": 300000,
 					"event_enabled": 0,
 					"event_threshold": 0,
-					"enable_statistics": 1				
+					"enable_statistics": 10				
 				},
 				"Magn": {
 					"name": "MAGN",
-					"unit": "n/a",
+					"unit": "uT",
 					"enabled": 1,
 					"publish": 1,
 					"stream_enabled": 1,
-					"stream_period": 100000,
+					"stream_period": 500000,
 					"event_enabled": 0,
 					"event_threshold": 0,
-					"enable_statistics": 1				
+					"enable_statistics": 10				
 				},
 				"Temp": {
 					"name": "TEMP",
-					"unit": "n/a",
+					"unit": "C",
 					"enabled": 1,
 					"publish": 2,
 					"stream_enabled": 1,
-					"stream_period": 1000000,
+					"stream_period": 5000000,
 					"event_enabled": 0,
 					"event_threshold": 0,
 					"enable_statistics": 1				
 				},
 				"Humi": {
 					"name": "HUMI",
-					"unit": "n/a",
+					"unit": "%",
 					"enabled": 1,
 					"publish": 2,
 					"stream_enabled": 1,
@@ -66,7 +66,7 @@
 				},
 				"Pres": {
 					"name": "PRES",
-					"unit": "n/a",
+					"unit": "hPas",
 					"enabled": 1,
 					"publish": 2,
 					"stream_enabled": 1,
@@ -77,7 +77,7 @@
 				},
 				"Ligh": {
 					"name": "LIGHT",
-					"unit": "n/a",
+					"unit": "lx",
 					"enabled": 1,
 					"publish": 1,
 					"stream_enabled": 1,
@@ -89,13 +89,13 @@
 				"Nois": {
 					"name": "NOIS",
 					"unit": "n/a",
-					"enabled": 1,
+					"enabled": 0,
 					"publish": 1,
 					"stream_enabled": 1,
 					"stream_period": 1000000,
 					"event_enabled": 0,
 					"event_threshold": 0,
-					"enable_statistics": 1				
+					"enable_statistics": 0				
 				}
 			}				
 		}
