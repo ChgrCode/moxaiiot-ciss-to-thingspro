@@ -5,6 +5,9 @@ Bosch CISS sensor
 
 '''
 Change log
+0.4.0 - 2020-08-12 - cg
+    Add serial reconnect
+    
 0.3.0 - 2020-08-05 - cg
     Restructure/Updates
     
@@ -14,7 +17,7 @@ Change log
 
 __author__ = "Christian G."
 __license__ = "MIT"
-__version__ = '0.3.0'
+__version__ = '0.4.0'
 __status__ = "beta"
     
 import sys
