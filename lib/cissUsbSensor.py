@@ -421,22 +421,27 @@ class AppCissNode(AppBase, CISSNode):
           
     def read_sensor_stream_until(self, number, timeout=0, loop_delay=0.01):
         self.log_debug('read_sensor_stream_until(%s, %s, %s)', number, timeout, loop_delay) 
+        retry = 0
         t = AppTimer()
         t.start()
         ix = 0
         while not self._serial_stop and (number == 0 or (ix < number)):
             ix = ix + 1
             try: 
-                if not self.ser.is_open:
-                    self.ser.open()
-                    if not self.ser.is_open:
-                        self.set_error_str(AppErrorCode.ERROR.value, 'Failed to re-open Serial Port')
-                        break
+                if not self.is_connected():
+                    self.connect()                    
+                    if not self.is_connected():
+                        self.set_error_str(AppErrorCode.ERROR.value, 'Failed to re-connect to Serial Port %s', self._serial_port)
+                        break                    
+                    self.reconfigure_sensors()
                 if not self.read_sensor_stream():
                     break
             except serial.SerialException as e:
-                self.log_exception('Read Serial Stream Exception!')
+                self.log_exception('Read Serial Stream Exception! Port %s', self._serial_port)
                 self.set_error_str(AppErrorCode.EXCEPTION.value, 'Failed to read Serial Port')
+                if retry < 3:
+                    retry = retry +  1
+                    continue
                 break
             
             if timeout != 0:
@@ -449,11 +454,20 @@ class AppCissNode(AppBase, CISSNode):
         self.log_debug('Collected %d times in %d ms', ix, t.get_elapsed())  
         if self.has_error(): return False      
         else: return True
+        
+    def read_sensor_thread(self, loop_delay):
+        self.log_info('Sensor read stream started!')
+        if not self.read_sensor_stream_until(0, 0, loop_delay):
+            self.disconnect()
+            return False
+        return True
     
     def start_read_thread(self):
+        self.log_info('Starting sensor read stream thread!')
+        self.clear_error()
         self._serial_thread = threading.Thread(name=self.get_base_id(), 
-                                               target=self.read_sensor_stream_until, 
-                                               args=[0, 0, 0.01], kwargs={})  
+                                               target=self.read_sensor_thread, 
+                                               args=[0.01], kwargs={})  
         self._serial_thread.start() 
         return True        
        
@@ -500,26 +514,9 @@ class AppCissNode(AppBase, CISSNode):
             print('[%s] %s'% (self.name, str(tmp)))
         return True
 
-    @staticmethod
-    def is_integer_num(n):
-        if isinstance(n, int):
-            return True
-        if isinstance(n, float):
-            return n.is_integer()
-        return False
-    
-    @staticmethod
-    def get_sensor_value(stream_data, sensor, default, absolute=False):
-        tmp = stream_data.get(sensor, default)
-        if not AppCissNode.is_integer_num(tmp):
-            tmp = 0
-        if absolute:
-            return abs(tmp)
-        else:
-            return tmp
        
     '''
-    CISSNode function
+    Overwrite CISSNode function
     '''         
     def read_sensor_stream(self): 
         #self.log_debug('read_ciss_sensor_stream')         
@@ -553,7 +550,7 @@ class AppCissNode(AppBase, CISSNode):
         return True
     
     '''
-    CISSNode function
+    Overwrite CISSNode function
     '''
     @staticmethod            
     def conv_data(data):
@@ -563,7 +560,7 @@ class AppCissNode(AppBase, CISSNode):
         return a
     
     '''
-    CISSNode function
+    Overwrite CISSNode function
     '''
     @staticmethod
     def check_payload(payload):
@@ -577,7 +574,7 @@ class AppCissNode(AppBase, CISSNode):
             return 0
 
     '''
-    CISSNode function
+    Overwrite CISSNode function
     '''            
     def parse_payload(self, payload):
         #self.log_debug('parse_payload') 
@@ -627,13 +624,35 @@ class AppCissNode(AppBase, CISSNode):
         return tempDict
 
     '''
-    CISSNode function
+    Overwrite CISSNode function
     '''
     def connect(self):
+        self.log_info('Open Serial Port %s', self._serial_port)
         if self._serial_stop:
-            self.log_error('Serial Port in stop mode!')
+            self.log_error('Serial Port in stop mode! Skipping ...')
             return False
         return self.ser.open()            
+    
+    '''
+    Overwrite CISSNode function
+    '''
+    def disconnect(self):
+        self.log_info('Close Serial Port %s', self._serial_port)
+        self.disable_sensors()
+        self.ser.close()
+    
+    def is_connected(self):
+        return self.ser.is_open
+    
+    def reconfigure_sensors(self):
+        self.log_info('Reconfigure Sensors')
+        if not self.ser.is_open:
+            self.log_error('Serial Port not opened! %s', self._serial_port)
+            return False
+        self.disable_sensors()
+        time.sleep(1)
+        self.config_sensors()
+        return True
     
     def do_exit(self):
         self._serial_stop = True

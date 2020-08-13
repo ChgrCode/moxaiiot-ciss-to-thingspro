@@ -167,6 +167,7 @@ class AppBase(object):
         return False
         
     def clear_error(self):
+        self.log_debug('Clearing Error %s!', self._error)
         self._error = AppErrorCode.OK.value
         self._error_str = ''
         
