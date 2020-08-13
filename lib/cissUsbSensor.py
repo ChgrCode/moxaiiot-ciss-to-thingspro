@@ -5,7 +5,7 @@ Bosch CISS sensor
 
 '''
 Change log
-0.4.0 - 2020-08-12 - cg
+0.4.0 - 2020-08-12 - cg 
     Add serial reconnect
     
 0.3.0 - 2020-08-05 - cg
