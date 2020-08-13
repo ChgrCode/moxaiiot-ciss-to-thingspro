@@ -1,22 +1,22 @@
 # moxaiiot-ciss-to-thingspro
 Publish Bosch CISS sensor data to ThingsPro Gateway
 
-[Bosch CISS sensor information] (https://www.bosch-connectivity.com/de/produkte/industrie-4-0/connected-industrial-sensor-solution/downloads/)
+[Bosch CISS sensor information](https://www.bosch-connectivity.com/de/produkte/industrie-4-0/connected-industrial-sensor-solution/downloads/)
 
-[ThingsPro Gateway information]
-(https://www.moxa.com/en/products/industrial-computing/system-software/thingspro-2)
+[ThingsPro Gateway information](https://www.moxa.com/en/products/industrial-computing/system-software/thingspro-2)
 
-1. Getting started
+[1. Getting started](#getting-started)
 
-2. Requirements
+[2. Requirements](#requirements)
 
-3. Configuration
+[3. Configuration](#configuration)
 
-4. Test 
+[4. Test](#test)
 
-5. ToDo's
+[5. ToDo's](#todos)
 
 *******************************************************************************
+<a name="getting-started"></a>
 ### 1. Getting started 
 
 * Download and Install ThingsPro Gateway software v2.5.x
@@ -25,6 +25,7 @@ Publish Bosch CISS sensor data to ThingsPro Gateway
 * Package the user program in tar.gz format
 * Upload the Compressed folder to the ThingsPro Gateway
 
+<a name="requirements"></a>
 ### 2. Requirements
 * UC-XXXX with ThingsPro Gateway v2.5.x installed
 * Bosch CISS Sensor connected to UC-XXXX USB
@@ -33,6 +34,7 @@ Publish Bosch CISS sensor data to ThingsPro Gateway
 	- pySerial 
 	- statistics (optional)
 
+<a name="configuration"></a>
 ### 3. Configuration
 
 The application uses one json formatted configuration file which can be selected with command line argument "-c <config.json>", if not provided it will use the default "sensor.json" file included in the main application directory. 
@@ -101,7 +103,7 @@ enabled: Enables the sensor in main program, if not enabled no values are stored
 
 	"publish": 6
 	
-publish: Bit value, enables publishing. If "1" (0x01), publish current sensor values to ThingsPro Gateway. If "2î (0x02), publish all collected values including calculated values, like statistics (optional). If 4 (0x04) and for all xyz sensors, publish also all xyz values.  ì0î disables publishing. 
+publish: Bit value, enables publishing. If "1" (0x01), publish current sensor values to ThingsPro Gateway. If "2‚Äù (0x02), publish all collected values including calculated values, like statistics (optional). If 4 (0x04) and for all xyz sensors, publish also all xyz values.  ‚Äú0‚Äù disables publishing. 
 e.g.: 6 = 0000 0110 = publish all values if xyz also sub values.
 
 	"enable_statistics": 1
@@ -117,7 +119,7 @@ enable_statistics: Enables statistic information for sensor values. If set and P
 These Values are based on the original Bosch CISS python script and are passed directly to the original CISSUsbConnectored.py script. Please check CISS sensor descriptions for details.
 For environmental sensors the max value from Temp, Humi, Pres is used.
 
-
+<a name="test"></a>
 ### 4. Testing the configuration
 
 Copy the project folder to UC e.g.: /home/moxa
@@ -140,11 +142,13 @@ If everything is ok, repack the whole folder content in a *.tgz file and upload 
 
 Best practice: Use the same name for the User Application as used for the CISS node.
 
+<a name="todos"></a>
 ### 5. ToDo's 
 
 There is still a lot to do, let me know your experience or if you have some feedback.
 * Running the sensors in event mode.
 
+<a name="restrictions"></a>
 ### 6. Restrictions
 * Only USB connection supported
 * Only streaming mode supported
