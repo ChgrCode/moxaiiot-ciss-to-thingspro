@@ -643,8 +643,11 @@ class AppCissNode(AppBase, CISSNode):
         self.log_info('Close Serial Port %s', self._serial_port)
         self.disable_sensors()
         self.ser.close()
+        # not set while closing 
+        self.ser.is_open = False        
     
     def is_connected(self):
+        self.log_debug('Serial port is open %s', self.ser.is_open)
         return self.ser.is_open
     
     def reconfigure_sensors(self):
