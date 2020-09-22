@@ -17,7 +17,7 @@ Change log
 
 __author__ = "Christian G."
 __license__ = "MIT"
-__version__ = '0.4.0'
+__version__ = '0.4.1'
 __status__ = "beta"
     
 import sys
@@ -271,6 +271,7 @@ class AppCissNode(AppBase, CISSNode):
         self._serial_port = self._ext_conf.get('com_port', '/dev/ttyACM0')
         self._serial_read_timeout = 1
         self._serial_thread = None
+        self._serial_connected = False
         
         self._stream_save_data = kwargs.get('stream_save_data', False)
         if self._stream_save_data:        
@@ -634,25 +635,32 @@ class AppCissNode(AppBase, CISSNode):
         if self._serial_stop:
             self.log_error('Serial Port in stop mode! Skipping ...')
             return False
-        return self.ser.open()            
+        self.ser.open()    
+        self._serial_connected = True
+        return         
     
     '''
     Overwrite CISSNode function
     '''
     def disconnect(self):
         self.log_info('Close Serial Port %s', self._serial_port)
-        self.disable_sensors()
+        try :
+            self.disable_sensors()
+        except Exception as e:
+            self.log_exception("Exception in disable_sensors")
+        
         self.ser.close()
-        # not set while closing 
-        self.ser.is_open = False        
+        self.ser.is_open = False
+        self._serial_connected = False
+        return       
     
     def is_connected(self):
-        self.log_debug('Serial port is open %s', self.ser.is_open)
-        return self.ser.is_open
+        #self.log_debug('Serial port is open %s', self.ser.is_open)
+        return self.ser.is_open and self._serial_connected
     
     def reconfigure_sensors(self):
         self.log_info('Reconfigure Sensors')
-        if not self.ser.is_open:
+        if not self.is_connected():
             self.log_error('Serial Port not opened! %s', self._serial_port)
             return False
         self.disable_sensors()

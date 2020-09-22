@@ -26,7 +26,7 @@
 					"enabled": 1,
 					"publish": 1,
 					"stream_enabled": 1,
-					"stream_period": 300000,
+					"stream_period": 100000,
 					"event_enabled": 0,
 					"event_threshold": 0,
 					"enable_statistics": 10				
@@ -37,7 +37,7 @@
 					"enabled": 1,
 					"publish": 1,
 					"stream_enabled": 1,
-					"stream_period": 500000,
+					"stream_period": 100000,
 					"event_enabled": 0,
 					"event_threshold": 0,
 					"enable_statistics": 10				
@@ -48,7 +48,7 @@
 					"enabled": 1,
 					"publish": 2,
 					"stream_enabled": 1,
-					"stream_period": 5000000,
+					"stream_period": 5,
 					"event_enabled": 0,
 					"event_threshold": 0,
 					"enable_statistics": 1				
@@ -59,7 +59,7 @@
 					"enabled": 1,
 					"publish": 2,
 					"stream_enabled": 1,
-					"stream_period": 1000000,
+					"stream_period": 5,
 					"event_enabled": 0,
 					"event_threshold": 0,
 					"enable_statistics": 1				
@@ -70,7 +70,7 @@
 					"enabled": 1,
 					"publish": 2,
 					"stream_enabled": 1,
-					"stream_period": 1000000,
+					"stream_period": 5,
 					"event_enabled": 0,
 					"event_threshold": 0,
 					"enable_statistics": 1				
@@ -81,7 +81,7 @@
 					"enabled": 1,
 					"publish": 1,
 					"stream_enabled": 1,
-					"stream_period": 1000000,
+					"stream_period": 1,
 					"event_enabled": 0,
 					"event_threshold": 0,
 					"enable_statistics": 1				
@@ -90,9 +90,9 @@
 					"name": "NOIS",
 					"unit": "n/a",
 					"enabled": 0,
-					"publish": 1,
-					"stream_enabled": 1,
-					"stream_period": 1000000,
+					"publish": 0,
+					"stream_enabled": 0,
+					"stream_period": 0,
 					"event_enabled": 0,
 					"event_threshold": 0,
 					"enable_statistics": 0				
