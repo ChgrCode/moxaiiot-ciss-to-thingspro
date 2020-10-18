@@ -5,6 +5,9 @@ Publish Bosch CISS sensor to ThingsPro Gateway
 
 '''
 Change log
+0.3.1 - 2020-08-05 - cg
+    Add VTag auto create
+    
 0.3.0 - 2020-08-05 - cg
     Restructure/Updates
     
@@ -14,13 +17,14 @@ Change log
 
 __author__ = "Christian G."
 __license__ = "MIT"
-__version__ = '0.3.0'
+__version__ = '0.3.1'
 __status__ = "beta"
 
 import sys
 
 from lib.chgrcodebase import *
 from lib.cissUsbSensor import *
+from lib.tpg_create_vtags import TpgEquipmentApp
 
 from libmxidaf_py import TagV2, Tag, Time, Value
 
@@ -54,6 +58,15 @@ class TpgCissContext(AppCissContext):
             self._tpg_publish_interval =  self._console_args.publish_interval*1000  
             self.log_info('Publish interval set to %s ms, from console arg!', self._tpg_publish_interval)     
         self._tagV2_obj = TagV2.instance()      
+        
+        equObj = TpgEquipmentApp('tpgAddEqu', mxapitoken = self.tpg_get_mx_api_token(),
+                                            equname = self._ext_conf['tpg_vtag_template'],
+                                            nodes = self._ext_conf['ciss_nodes'],
+                                            logger = self.get_logger())
+        
+        curEqu = equObj.tpg_check_equipment()
+        if not equObj.tpg_create_equipment(curEqu):
+            return False 
 
         return True
     
@@ -152,15 +165,20 @@ class TpgCissContext(AppCissContext):
         for what in value_list:
             tValue = Value(int(sensor.get_value(what)))    
             vtag = Tag(tValue, at, sensor.unit)
-            tag_name = self.tpg_publish_tag_name(sensor.ciss_node.name, sensor.name, what)
+            tag_name = TpgEquipmentApp.tpg_publish_tag_name(sensor.ciss_node.name, sensor.name, what)
             self._tagV2_obj.publish(self._vtag_template_name, tag_name, vtag)            
             self.log_debug('tagV2 publish to %s tag %s = %s', self._vtag_template_name, tag_name, str(vtag.value()))
         return True
     
-    @staticmethod
-    def tpg_publish_tag_name(node_name, sensor_name, which):
-        tag_name = ('%s-%s-%s'% (node_name, sensor_name, which))
-        return tag_name
+    def tpg_get_mx_api_token(self):
+        return AppContext.import_file('/etc/mx-api-token', 'text') 
+    
+#    @staticmethod
+#    def tpg_publish_tag_name(node_name, sensor_name, which):
+#        tag_name = ('%s-%s-%s'% (node_name, sensor_name, which))
+#        return tag_name
+    
+
     
 '''
 '''

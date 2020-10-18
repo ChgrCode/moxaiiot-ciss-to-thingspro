@@ -4,7 +4,6 @@
 	"ciss_nodes" : {
 		"cissACM0": {
 			"name": "CissACM0",
-			"ini_file": "sensor.ini",
 			"ini_print": "True",
 			"com_port": "/dev/ttyACM0",
 			"sensors": {
@@ -48,10 +47,10 @@
 					"enabled": 1,
 					"publish": 2,
 					"stream_enabled": 1,
-					"stream_period": 5,
+					"stream_period": 1,
 					"event_enabled": 0,
 					"event_threshold": 0,
-					"enable_statistics": 1				
+					"enable_statistics": 0				
 				},
 				"Humi": {
 					"name": "HUMI",
@@ -59,21 +58,21 @@
 					"enabled": 1,
 					"publish": 2,
 					"stream_enabled": 1,
-					"stream_period": 5,
+					"stream_period": 1,
 					"event_enabled": 0,
 					"event_threshold": 0,
-					"enable_statistics": 1				
+					"enable_statistics": 0				
 				},
 				"Pres": {
 					"name": "PRES",
 					"unit": "hPas",
 					"enabled": 1,
-					"publish": 2,
+					"publish": 1,
 					"stream_enabled": 1,
 					"stream_period": 5,
 					"event_enabled": 0,
 					"event_threshold": 0,
-					"enable_statistics": 1				
+					"enable_statistics": 0				
 				},
 				"Ligh": {
 					"name": "LIGHT",
@@ -84,7 +83,7 @@
 					"stream_period": 1,
 					"event_enabled": 0,
 					"event_threshold": 0,
-					"enable_statistics": 1				
+					"enable_statistics": 0				
 				},
 				"Nois": {
 					"name": "NOIS",

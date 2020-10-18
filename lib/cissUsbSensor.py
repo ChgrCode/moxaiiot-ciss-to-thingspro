@@ -4,7 +4,7 @@ Bosch CISS sensor
 '''
 
 '''
-Change log
+Change log    
 0.4.0 - 2020-08-12 - cg 
     Add serial reconnect
     
@@ -17,7 +17,7 @@ Change log
 
 __author__ = "Christian G."
 __license__ = "MIT"
-__version__ = '0.4.1'
+__version__ = '0.5.0'
 __status__ = "beta"
     
 import sys
@@ -28,10 +28,10 @@ import math
 from enum import Enum
 from collections import deque
 
-from chgrcodebase import *
-from CissUsbConnectord_v2_3_1 import CISSNode
+from .chgrcodebase import *
+from .CissUsbConnectord_v2_3_1 import CISSNode
 
-if check_for_module('statistics'):
+if AppUtil.module_exists('statistics'):
     import statistics  
 
 # Sensor Index 
@@ -58,7 +58,7 @@ class SnIx(Enum):
         return self.value 
 
 class CissSensor(AppBase):
-    _has_statistics_mod = check_for_module('statistics')
+    _has_statistics_mod = AppUtil.module_exists('statistics')
     
     def __init__(self, node, id='cissSensor', **kwargs):
         AppBase.__init__(self, id, **kwargs)

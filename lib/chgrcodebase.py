@@ -13,7 +13,7 @@ Change log
 
 __author__ = "chgrCode"
 __license__ = "MIT"
-__version__ = '1.0.0'
+__version__ = '1.1.0'
 __maintainer__ = "chgrCode"
 __credits__ = ["..."]
 __status__ = "beta"
@@ -36,6 +36,7 @@ class AppErrorCode(IntEnum):
     EXCEPTION = ERROR + 1
     TIMEOUT = ERROR + 2
 
+
 '''
 '''
 class AppLogLevel(IntEnum):
@@ -45,10 +46,22 @@ class AppLogLevel(IntEnum):
     INFO = 20
     DEBUG = 10
     NOTSET = 0
+    
 
+'''
+'''
+class AppBaseError(Exception):
+    """A custom exception used to report errors in use of AppBase class"""
+
+
+'''
+'''
 class AppTimerError(Exception):
     """A custom exception used to report errors in use of AppTimer class"""
-       
+
+
+'''
+'''       
 class AppTimer(object):
     timers = dict()
     
@@ -105,10 +118,18 @@ class AppTimer(object):
             if self._elapsed_time is None:
                 self.is_elapsed(0)
             return self._elapsed_time
-            
-class AppBaseError(Exception):
-    """A custom exception used to report errors in use of AppBase class"""
-    
+
+    def get_run_time(self, seconds=False):
+        if self._start_time is None:
+            raise AppTimerError('Timer is not running. Use .start() to start it')       
+        if seconds is True:
+            return (self.timer() - self._start_time) / 1000
+        else: 
+            return self.timer() - self._start_time
+                
+
+'''
+'''    
 class AppBase(object):        
     ''' Default App Base class constructor '''
     def __init__(self, id='base', **kwargs):
@@ -120,12 +141,13 @@ class AppBase(object):
         @raise e: ...
         http://epydoc.sourceforge.net/manual-fields.html#module-metadata-variables
         """            
+        self._base_id = id
         self._logger = kwargs.get('logger', None)
         self._logger_level = AppLogLevel.NOTSET.value
-        self._base_id = id
+        self._logger_extra = {'base_id': self._base_id}        
         self._error = AppErrorCode.OK.value
         self._error_str = ''
-        self._logger_extra = {'base_id': self._base_id}
+        
         return
     
     def get_base_id(self):
@@ -228,21 +250,68 @@ class AppBase(object):
 
     @staticmethod
     def vlevel_2_log_level(verbose_level):
+        if verbose_level is None or verbose_level == 0:
+            return AppLogLevel.NOTSET
         if verbose_level >= 3:
             level = AppLogLevel.DEBUG
         elif verbose_level == 2:
             level = AppLogLevel.INFO
-        else:
+        elif verbose_level == 1:
             level = AppLogLevel.ERROR
+        else:
+            level = AppLogLevel.NOTSET
         return level
                    
- 
+
+'''
+'''                 
+class AppModuleBase(AppBase):
+    
+    def __init__(self, id='module', **kwargs):
+        AppBase.__init__(self, id, **kwargs)  
+        self._ext_conf = kwargs.get('conf', None)      
+        return
+    
+    def parse_config(self, **kwargs):
+        self.log_info('parse_config')
+        return True
+    
+    def validate_config(self, **kwargs):
+        self.log_info('validate_config')
+        return True
+    
+    def create(self, **kwargs):
+        self.log_info('-create')
+        if not self.parse_config(**kwargs):
+            return False
+        if not self.validate_config(**kwargs):
+            return False
+        return True
+    
+    def init(self, **kwargs):
+        self.log_info('-init')
+        return True
+    
+    def run(self, **kwargs):
+        self.log_info('-run')
+        return True
+    
+    def exit(self, reason):
+        self.log_info('-exit')
+        return True
+    
+
+'''
+'''
 class AppContext(AppBase):
     
     def __init__(self, argc, **kwargs):
         AppBase.__init__(self, kwargs.get('app_name', 'Context'), **kwargs)
         self._console_args = argc
-        self._config_file = argc.config_file      
+        if isinstance(self._console_args.config_file, str):
+            self._config_file = self._console_args.config_file.strip()
+        else:
+            self._config_file = None       
         self._run = False   
         if argc.verbose_level != None:
             self._logger_level = AppBase.vlevel_2_log_level(argc.verbose_level)
@@ -266,41 +335,47 @@ class AppContext(AppBase):
                                 level = global_level, 
                                 handlers=[logging.NullHandler()])   
 
+        stdout_level = AppBase.vlevel_2_log_level(console_level)
         _logger = logging.getLogger(__name__)
         _logger.propagate = False
-        if console_level != None: 
-            level = AppBase.vlevel_2_log_level(console_level)
+        if console_level != None:
             logFormatStr = '[%(levelname)+7s] %(asctime)s,%(msecs)d - %(threadName)s[%(base_id)s] : %(message)s'           
             ch = logging.StreamHandler(sys.stdout)
-            ch.setLevel(level)
+            ch.setLevel(stdout_level)
             ch.setFormatter(logging.Formatter(logFormatStr, datefmt='%I:%M:%S'))            
             _logger.addHandler(ch)
-            logging.info('Enabled Verbose logging level %s!', level)  
+            _logger.setLevel(stdout_level)
+            logging.info('Enabled Verbose logging level %s!', stdout_level)  
                     
         if file_level != None:
             if logger_file == None:
                 logger_file = '%s.log'% __name__                
-            logFormatStr = '%(asctime)s - %(name)s.%(threadName)s[%(base_id)s] : %(levelname)+7s : %(message)s'
+            logFormatStr = '%(asctime)s [%(levelname)+7s] %(threadName)s[%(base_id)s] : %(message)s'
             logrotate = logging.handlers.RotatingFileHandler(
                     logger_file, maxBytes=(1024*1024*10), backupCount=5)
             logrotate.setLevel(file_level)
             logrotate.setFormatter(logging.Formatter(logFormatStr))     
-            _logger.addHandler(logrotate)            
-            logging.debug('Enabled File logging Level %s to %s!', file_level, logger_file)       
+            _logger.addHandler(logrotate)   
+            _logger.setLevel(file_level)        
+            logging.debug('Enabled File logging Level %s to %s!', file_level, logger_file)  
+         
+        if file_level and stdout_level:
+            _logger.setLevel(min(file_level, stdout_level))        
         
         return _logger
     
     @staticmethod
-    def import_file(file, type, def_path='/conf'):         
+    def import_file(file, type, def_path='./conf'):         
         if not os.access(file, os.R_OK):
             mydir = os.path.dirname(os.path.realpath(__file__))
             mydir = os.path.dirname(sys.argv[0])
-            confdir = os.path.abspath(mydir + def_path)
+            abspath = os.path.abspath(mydir)
+            confdir = os.path.abspath('%s%s'% (abspath, def_path))
             def_file = os.path.join(confdir, file) 
             if not os.access(def_file, os.R_OK):
-                raise AppBaseError('Missing configuration file [%s]!'% file)
+                raise AppBaseError('Missing configuration file [%s] path [%s] in [%s]!'% (file, abspath, def_file))
             else:
-                file = def_file                  
+                file = def_file                   
         if type == 'text': 
             h_file = open(file) 
             _ext_content = h_file.read() 
@@ -366,3 +441,31 @@ class AppContext(AppBase):
         self.stop_run_context(signum)   
 
 
+'''
+'''
+class AppUtil(AppBase):
+    
+    '''
+    '''
+    @staticmethod
+    def debug_print_classes(what=__name__):
+        print('Classes from module %s'% what)
+        for name, obj in inspect.getmembers(sys.modules[what]):
+            if inspect.isclass(obj):
+                print(obj)
+            else:
+                print(name)
+        print('End of modules')
+        return
+    
+    
+    '''
+    '''
+    @staticmethod
+    def module_exists(module):
+        try:
+            __import__('imp').find_module(module)
+            found = True
+        except ImportError:
+            found = False
+        return found
