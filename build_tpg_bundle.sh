@@ -9,6 +9,8 @@ BUNDLE_CONTENT=(
 
 exec 
 ciss_to_tpg.py
+sensor.json
+sensor_all.json
 LICENSE
 README.md
 lib/*
